@@ -49,12 +49,28 @@ class DbManager:
 		return self.db.sql("SHOW DATABASES", pluck=True)
 
 	@staticmethod
+<<<<<<< HEAD
 	def restore_database(target, source, user, password):
 		import os
 		from distutils.spawn import find_executable
+=======
+	def restore_database(verbose: bool, target: str, source: str, user: str, password: str) -> None:
+		"""
+		Function to restore the given SQL file to the target database.
+		:param target: The database to restore to.
+		:param source: The SQL dump to restore
+		:param user: The database username
+		:param password: The database password
+		:return: Nothing
+		"""
+
+		import shlex
+		from shutil import which
+>>>>>>> bb945ab96b (fix: remove mariadb sandbox mode comment before restoring backups)
 
 		from frappe.utils import make_esc
 
+<<<<<<< HEAD
 		esc = make_esc("$ ")
 		pv = find_executable("pv")
 
@@ -85,3 +101,39 @@ class DbManager:
 
 		os.system(command)
 		frappe.cache().delete_keys("")  # Delete all keys associated with this site.
+=======
+		# Ensure that the entire process fails if any part of the pipeline fails
+		command = ["set -o pipefail;"]
+
+		# Handle gzipped backups
+		if source.endswith(".gz"):
+			if gzip := which("gzip"):
+				command.extend([gzip, "-cd", source, "|"])
+			else:
+				raise Exception("`gzip` not installed")
+		else:
+			command.extend(["cat", source, "|"])
+
+		# Newer versions of MariaDB add in a line that'll break on older versions, so remove it
+		command.extend(["sed", r"'/\/\*!999999\\- enable the sandbox mode \*\//d'", "|"])
+
+		# Generate the restore command
+		bin, args, bin_name = get_command(
+			socket=frappe.conf.db_socket,
+			host=frappe.conf.db_host,
+			port=frappe.conf.db_port,
+			user=user,
+			password=password,
+			db_name=target,
+		)
+		if not bin:
+			frappe.throw(
+				_("{} not found in PATH! This is required to restore the database.").format(bin_name),
+				exc=frappe.ExecutableNotFound,
+			)
+		command.append(bin)
+		command.append(shlex.join(args))
+
+		execute_in_shell(" ".join(command), check_exit_code=True, verbose=verbose)
+		frappe.cache.delete_keys("")  # Delete all keys associated with this site.
+>>>>>>> bb945ab96b (fix: remove mariadb sandbox mode comment before restoring backups)
